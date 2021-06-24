@@ -30,7 +30,7 @@ If you do not have them installed, you can use these commands:
 2. Navigate to where you wish to download this
 3. Open command line and type 'git clone https://github.com/Steven-Jarmell/RedditScraper.git'
 4. Launch the main.py folder
-5. The program will display the number of comments left to go through and print out a graph at the end which will look like this
+5. The program will display the number of comments left to go through and print out a graph at the end which will look like this  
 ![Figure](/Figure_1.png?raw=true)
 
 ## License
