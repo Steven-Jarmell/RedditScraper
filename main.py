@@ -2,13 +2,12 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from collections import Counter
 import requests
-import csv
 import os.path
 import numpy as np
 from datetime import date, timedelta
 from dateutil.parser import parse
 import pandas as pd
-
+import matplotlib.pyplot as plt
 
 DAILY_URL = "https://www.reddit.com/r/wallstreetbets/search/?q=flair%3A%22Daily%20Discussion%22&restrict_sr=1&sort=new"
 WEEKEND_URL = "https://www.reddit.com/r/wallstreetbets/search/?q=flair%3A%22Weekend%20Discussion%22&restrict_sr=1&sort="
@@ -102,8 +101,9 @@ if __name__ == "__main__":
         make_list_of_stock_symbols()
     
     all_stocks = []
+    datesMentioned = []
 
-    for i in range(7): #7 is max amount
+    for i in range(7):
         day_to_analyze = date.today() - timedelta(days = i+3)
         
         if day_to_analyze.weekday() > 4:
@@ -114,7 +114,9 @@ if __name__ == "__main__":
                 driver = create_driver(WEEKEND_URL)
         else:
             driver = create_driver(DAILY_URL)
-        print(day_to_analyze)
+        
+        datesMentioned.append(day_to_analyze)
+
         thread_id = get_comment_thread_link(driver, day_to_analyze)#Works #Gets the ID for one particular thread
         
         comment_id_dictionary = get_comment_ids(thread_id)#Works #Creates a dictionary of the comment IDs from this thread
@@ -123,51 +125,43 @@ if __name__ == "__main__":
         
         comment_id_array = np.array(comment_id_dictionary['data']) #Creates an array of all the IDs from the comment dictionary
         comment_id_list = ",".join(comment_id_array[0:1000]) #Concatenates the strings of the first 1000 comment ID's
-        actual_comments = get_comments(comment_id_list)#Gets the actual comments to be analyzed
+
+        try:
+            actual_comments = get_comments(comment_id_list)#Gets the actual comments to be analyzed
+        except:  
+            continue 
+                     
+        # Had to put this statement in a try except loop since sometimes the comments 
+        # Throw a JSONDecodeError, which crashes the program
+        # From stackoverflow, this error could be from 3 reasons:
+        # XML/HTML output 
+        # non-JSON conforming quoting
+        # incompatible character encoding
+        # I believe that some of the comments contain certain characters which throw the JSONDecodeError
+
         stock_dictionary = get_stock_list(actual_comments, stocks_list)#works
        
         stocks = get_stock_count(stock_dictionary, comment_id_dictionary, stocks_list) #Purpose is to go through all the comments, not just the original 1000
         
         all_stocks.append(stocks)
     
-    
+    combinedDataFrame = pd.DataFrame()
 
-    
-    
-    #This keeps not working due to the date going back too far, only goes to the 14th for daily discussions before it reaches
-    #End of the page
+    for stock in all_stocks:
+        df = pd.DataFrame(stock, index=[0])
+        combinedDataFrame = pd.concat([combinedDataFrame, df], axis=1)
 
+    combinedDataFrame = (pd.melt(combinedDataFrame)
+    .rename(columns={
+    'variable' : 'Stock Ticker',
+    'value' : 'Number of Occurences'}))
 
+    aggregation_functions = {'Stock Ticker': 'first' , 'Number of Occurences': 'sum'}
+    combinedDataFrame = combinedDataFrame.groupby('Stock Ticker', as_index=False).agg(aggregation_functions)
+    highestOccuring = combinedDataFrame.sort_values('Number of Occurences', ascending = False).head()
 
-#Pushshift API 60 hours behind, maybe switch to reddit api
-
-#On command, should ask for the daily or weekly maybe monthly results
-#Display a plot with the 5 most occuring stock symbols
-#Display a second plot with the price of the stock during the time period
-
-#if not(os.path.isfile('stockCounts.csv')):
-#            print('creating cvs')
- ##              fieldnames = ['Stock', 'Number of Mentions']
-   #             writer = csv.DictWriter(w, fieldnames=fieldnames)
-    #            writer.writeheader()
-     #           for stock in data:
-      #              writer.writerow(stock)
-       #     w.close()
-        #else:
-         #   print('appending file')
-          #  with open('stockCounts', 'a') as a:
-           #     fieldnames = ['Stock', 'Number of Mentions']
-            #    writer = csv.writer(a, fieldnames = fieldnames)
-             #   writer.writeheader()
-              #  for stock in data:
-               #     writer.writerow(stock)
-            #a.close()
-
-
-#while True:
- #       try:
-  #          actual_comments = html_.json() #Gets the actual comments using the comment ID
-   #     except Exception:
-    #        continue
-     #   else:
-      #      break
+    plt.bar(highestOccuring['Stock Ticker'], highestOccuring['Number of Occurences'])
+    plt.title('Most Common Stock Tickers Mentioned from ' + str(datesMentioned[-1]) + ' to ' + str(datesMentioned[0]))
+    plt.xlabel('Stock Tickers')
+    plt.ylabel('Number of Mentions')
+    plt.show()
